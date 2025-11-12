@@ -1,0 +1,8 @@
+node_modules/
+
+# local challenge mirrors
+challenges/
+reports/
+.cache/
+.env
+.env.*
