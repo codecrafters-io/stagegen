@@ -52,4 +52,6 @@ export type CLIOpts = {
   refs?: string[];
   targets?: string[];
   model?: string;
+  langConcurrency?: number;
+  taskConcurrency?: number;
 };

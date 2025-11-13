@@ -64,6 +64,18 @@ export function parseCLI(argv: string[]): CLIOpts {
         i++;
         break;
       }
+      case "--lang-concurrency": {
+        const v = take(argv, i);
+        if (v) opts.langConcurrency = Math.max(1, Number(v));
+        i++;
+        break;
+      }
+      case "--task-concurrency": {
+        const v = take(argv, i);
+        if (v) opts.taskConcurrency = Math.max(1, Number(v));
+        i++;
+        break;
+      }
       default: {
         // ignore unknown flags for now
         break;
