@@ -35,6 +35,15 @@ export type ExampleBundle = {
   }>;
 };
 
+export type GenerateInput = {
+  bundle: ExampleBundle;
+  target: Language;
+  fixedTitles: string[];
+  model: string;
+  challengeSlug: string;
+  previous?: { stageId: string | null; code: string }; // new
+};
+
 export type CLIOpts = {
   projectRoot?: string;
   challengeSlug?: string;

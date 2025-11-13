@@ -15,5 +15,5 @@ export const DEFAULTS = {
   stageId: "02-rg2",
   stageKind: "base" as "base" | "localized",
   refs: ["python", "go", "rust"],
-  targets: ["javascript", "typescript", "zig", "cpp"],
+  targets: ["javascript", "typescript", "zig", "cpp", "elixir"],
 };

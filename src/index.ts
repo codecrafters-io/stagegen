@@ -1,26 +1,25 @@
-#!/usr/bin/env bun
 import path from "node:path";
+
 import {
-  readStageDescription,
   readReferenceSolution,
   readReferenceHintTitles,
+  readReferenceHints,
+  readPreviousSolution,
   writeTargetSolution,
   writeTargetHints,
   defaultFileForLanguage,
-  readReferenceHints,
+  readStageDescription,
 } from "./io";
-import { generateForLanguage } from "./generate";
-import type { ExampleBundle } from "./types";
 import { parseCLI } from "./cli";
 import { DEFAULTS, DEFAULT_MODEL } from "./defaults";
+import { generateForLanguage } from "./generate";
+import type { ExampleBundle } from "./types";
 
 function deriveChallengeSlug(projectRoot: string, provided?: string): string {
   if (provided && provided.length > 0) return provided;
-  // Try to infer from challenges/<slug>
   const parts = projectRoot.split(path.sep);
   const idx = parts.lastIndexOf("challenges");
   if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-  // Fallback to basename
   return path.basename(projectRoot);
 }
 
@@ -39,15 +38,15 @@ async function main() {
   const MODEL = cli.model || DEFAULT_MODEL;
   const DRY = !!process.env.DRY_RUN;
 
-  // Read stage description from challenges/<slug>/stage_descriptions/
+  const baseId = STAGE_ID;
+
   const stageDescription = await readStageDescription(
     PROJECT_ROOT,
     CHALLENGE_SLUG,
-    STAGE_ID,
+    baseId,
     STAGE_KIND
   );
 
-  // Gather fixed titles and minimal reference code from reference languages
   const examples = await Promise.all(
     REFS.map(async (lang) => {
       const solutionCode = await readReferenceSolution(
@@ -89,13 +88,23 @@ async function main() {
 
   for (const lang of TARGETS) {
     console.log(`→ Generating for ${lang}...`);
-    const out = await generateForLanguage(
-      bundle,
+
+    // new: read previous solution for this language, if any
+    const prev = await readPreviousSolution(
+      PROJECT_ROOT,
+      CHALLENGE_SLUG,
       lang,
-      fixedTitles,
-      MODEL,
-      CHALLENGE_SLUG
+      STAGE_ID
     );
+
+    const out = await generateForLanguage({
+      bundle,
+      target: lang,
+      fixedTitles,
+      model: MODEL,
+      challengeSlug: CHALLENGE_SLUG,
+      previous: prev,
+    });
 
     const filename = defaultFileForLanguage(lang);
     await writeTargetSolution(
@@ -116,7 +125,10 @@ async function main() {
       DRY
     );
 
-    console.log(`   Wrote solution and hints for ${lang}`);
+    console.log(
+      `   Wrote solution and hints for ${lang}` +
+        (prev.stageId ? ` (built on ${prev.stageId})` : "")
+    );
   }
 
   console.log("\nDone. Open PRs manually with the generated files.");

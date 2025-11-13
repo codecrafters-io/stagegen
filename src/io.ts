@@ -7,15 +7,6 @@ function challengeDir(projectRoot: string, slug: string) {
   return path.join(projectRoot, "challenges", slug);
 }
 
-async function pathExists(p: string) {
-  try {
-    await fs.stat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function readStageDescription(
   projectRoot: string,
   slug: string,
@@ -75,43 +66,146 @@ function langExt(lang: Language): string {
   if (lang === "ruby") return ".rb";
   if (lang === "java") return ".java";
   if (lang === "crystal") return ".cr";
+  if (lang === "c") return ".c";
+  if (lang === "cpp") return ".cpp";
+  if (lang === "elixir") return ".ex";
+  if (lang === "kotlin") return ".kt";
   return "";
 }
 
-async function tryRead(p: string): Promise<string | null> {
+async function pathExists(p: string) {
   try {
-    return await fs.readFile(p, "utf8");
+    await fs.stat(p);
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
-export async function readReferenceSolution(
+async function findMainFileRecursive(
+  baseDir: string,
+  ext: string
+): Promise<string | null> {
+  const direct = path.join(baseDir, `main${ext}`);
+  if (await pathExists(direct)) return direct;
+
+  const roots = ["src", "lib", "app"];
+  for (const r of roots) {
+    const rootDir = path.join(baseDir, r);
+    if (!(await pathExists(rootDir))) continue;
+
+    // BFS limited to a few levels for safety
+    const queue: string[] = [rootDir];
+    let depth = 0;
+    const maxDepth = 4;
+
+    while (queue.length && depth <= maxDepth) {
+      const levelCount = queue.length;
+      for (let i = 0; i < levelCount; i++) {
+        const cur = queue.shift()!;
+        try {
+          const entries = await fs.readdir(cur, { withFileTypes: true });
+          for (const de of entries) {
+            const fp = path.join(cur, de.name);
+            if (de.isDirectory()) {
+              queue.push(fp);
+            } else if (de.isFile() && de.name === `main${ext}`) {
+              return fp;
+            }
+          }
+        } catch {
+          // ignore directory read errors
+        }
+      }
+      depth++;
+    }
+  }
+  return null;
+}
+
+/** Read solution code for a given stage folder id like "02-rg2". */
+export async function readSolutionAt(
   projectRoot: string,
   slug: string,
   language: Language,
   stageId: string
-) {
-  const base = path.join(
+): Promise<string> {
+  const codeDir = path.join(
     challengeDir(projectRoot, slug),
     "solutions",
     language,
     stageId,
     "code"
   );
-
   const ext = langExt(language);
-  const candidates = [
-    path.join(base, "src", `main${ext}`),
-    path.join(base, "app", `main${ext}`),
-  ];
-
-  for (const fp of candidates) {
-    const content = await tryRead(fp);
-    if (content !== null) return content;
+  const found = await findMainFileRecursive(codeDir, ext);
+  if (!found) return "";
+  try {
+    return await fs.readFile(found, "utf8");
+  } catch {
+    return "";
   }
+}
 
-  return "";
+/** Previous stage id for this language by numeric prefix, or null if none. */
+export async function findPreviousStageId(
+  projectRoot: string,
+  slug: string,
+  language: Language,
+  currentStageId: string
+): Promise<string | null> {
+  const langDir = path.join(
+    challengeDir(projectRoot, slug),
+    "solutions",
+    language
+  );
+  if (!(await pathExists(langDir))) return null;
+  const m = currentStageId.match(/^(\d+)/);
+  if (!m) return null;
+  const curNum = Number(m[1]);
+
+  const dirs = (await fs.readdir(langDir, { withFileTypes: true }))
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
+
+  // find a dir whose numeric prefix equals curNum - 1
+  const candidates = dirs
+    .map((name) => {
+      const mm = name.match(/^(\d+)/);
+      return mm ? { name, num: Number(mm[1]) } : null;
+    })
+    .filter((x): x is { name: string; num: number } => !!x);
+
+  const prev = candidates.find((c) => c.num === curNum - 1);
+  return prev ? prev.name : null;
+}
+
+/** Read the previous stage solution for the same language if present. */
+export async function readPreviousSolution(
+  projectRoot: string,
+  slug: string,
+  language: Language,
+  currentStageId: string
+): Promise<{ stageId: string | null; code: string }> {
+  const prevId = await findPreviousStageId(
+    projectRoot,
+    slug,
+    language,
+    currentStageId
+  );
+  if (!prevId) return { stageId: null, code: "" };
+  const code = await readSolutionAt(projectRoot, slug, language, prevId);
+  return { stageId: prevId, code };
+}
+
+/** Keep your existing readers below... */
+export async function readReferenceSolution(
+  projectRoot: string,
+  slug: string,
+  language: Language,
+  stageId: string
+) {
+  return readSolutionAt(projectRoot, slug, language, stageId);
 }
 
 export async function readReferenceHintTitles(
@@ -160,12 +254,10 @@ export async function readReferenceHints(
     const raw = await fs.readFile(cfgPath, "utf8");
     const parsed = YAML.parse(raw) as HintsFile;
     if (!parsed || !Array.isArray(parsed.hints)) return [];
-    return parsed.hints
-      .filter((h) => h && typeof h.title_markdown === "string")
-      .map((h) => ({
-        title_markdown: String(h.title_markdown),
-        body_markdown: String(h.body_markdown || ""),
-      }));
+    return parsed.hints.map((h) => ({
+      title_markdown: String(h.title_markdown || ""),
+      body_markdown: String(h.body_markdown || ""),
+    }));
   } catch {
     return [];
   }
@@ -247,5 +339,7 @@ export function defaultFileForLanguage(lang: Language): string {
   if (lang === "c") return "main.c";
   if (lang === "cpp") return "main.cpp";
   if (lang === "crystal") return "main.cr";
+  if (lang === "elixir") return "main.ex";
+  if (lang === "kotlin") return "Main.kt";
   return "main.txt";
 }
