@@ -74,6 +74,8 @@ async function main() {
 
   if (!TARGETS.length) {
     TARGETS = await listChallengeLanguages(PROJECT_ROOT, CHALLENGE_SLUG);
+    TARGETS = TARGETS.filter((t) => !REFS.includes(t));
+
     if (!TARGETS.length) {
       throw new Error(
         `No target languages provided and none detected under ` +

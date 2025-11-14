@@ -7,6 +7,11 @@ function challengeDir(projectRoot: string, slug: string) {
   return path.join(projectRoot, "challenges", slug);
 }
 
+export function withTrailingNewline(s: string): string {
+  if (s.length === 0) return "\n";
+  return s.endsWith("\n") ? s : s + "\n";
+}
+
 // List every direct child directory under challenges/<slug>/solutions
 export async function listChallengeLanguages(
   projectRoot: string,
@@ -267,7 +272,7 @@ export async function writeSolutionOverStarter(
   }
 
   if (!dryRun) {
-    await fs.writeFile(mainPath, solutionCode, "utf8");
+    await fs.writeFile(mainPath, withTrailingNewline(solutionCode), "utf8");
   }
 
   return mainPath;
